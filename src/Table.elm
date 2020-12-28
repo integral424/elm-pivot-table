@@ -5,6 +5,7 @@ module Table exposing
     , makeTable
     , Aggregator
     , pivotTable
+    , pivotTableHtml
     )
 
 import Html exposing
@@ -18,11 +19,24 @@ import Html.Attributes exposing
     ( colspan
     , rowspan
     )
+import Array exposing (Array)
 import List.Extra
-import Set exposing
-    ( Set
-    )
+import Set exposing (Set)
 
+import Element exposing
+    ( Element
+    , none
+    , el
+    , row
+    , column
+    , width
+    , height
+    , fill
+    , fillPortion
+    , minimum
+    , alignLeft
+    , alignRight
+    )
 
 type Table row
     = Table (List row)
@@ -194,7 +208,7 @@ type alias Aggregator row comparable =
     List row -> comparable
 
 
-pivotTable :
+pivotTableHtml :
     { rowHeaders : List (Column row comparable1)
     , colHeaders : List (Column row comparable2)
     , aggregator : Aggregator row comparable3
@@ -204,7 +218,7 @@ pivotTable :
     }
     -> Table row
     -> Html msg
-pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } tbl =
+pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } tbl =
     let
         indexedTable : Table ( Int, row )
         indexedTable =
@@ -334,3 +348,89 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } tbl
             Set.fromList indices
     in
     viewColHeaders [ colGroup ] ++ viewRows rowGroup |> table []
+
+pivotTable :
+    { rowHeaders : List (Column row comparable1)
+    , colHeaders : List (Column row comparable2)
+    , aggregator : Aggregator row comparable3
+    , viewRow : comparable1 -> Element msg
+    , viewCol : comparable2 -> Element msg
+    , viewAgg : comparable3 -> Element msg
+    }
+    -> Table row
+    -> Element msg
+pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Table rows) =
+    let
+        indexedTable : Table ( Int, row )
+        indexedTable = indexedMap Tuple.pair (Table rows)
+
+        arr : Array row
+        arr = Array.fromList rows
+
+        getRowByIndex : Int -> Maybe row
+        getRowByIndex index = Array.get index arr
+
+        getIndices : Table Int -> Set Int
+        getIndices (Table indices) =
+            Set.fromList indices
+
+        -- ignore index
+        columnShim : Column row comparable -> Column ( Int, row ) comparable
+        columnShim col =
+            Tuple.second >> col
+
+        rowGroup : Tree Int comparable1
+        rowGroup =
+            group (List.map columnShim rowHeaders) indexedTable |> mapTree Tuple.first
+
+        colGroup : Tree Int comparable2
+        colGroup =
+            group (List.map columnShim colHeaders) indexedTable |> mapTree Tuple.first
+
+        colPaths : List (TreePath comparable2)
+        colPaths =
+            getPaths colGroup
+        
+        shim : Element msg
+        shim = el [ width <| fillPortion <| List.length rowHeaders ] none
+
+        viewColHeaderRows : Tree Int comparable2 -> Element msg
+        viewColHeaderRows tree =
+            let
+                f : (comparable2, Tree Int comparable2) -> Element msg
+                f (c, subTree) = column [ width <| fillPortion <| getWidth subTree ] [ viewCol c, viewColHeaderRows subTree ]
+            in
+            case tree of
+                Leaf _ -> none
+                Node lst -> row [ width <| fillPortion <| getWidth tree ] (List.map f lst)
+        
+        viewRows : Int -> Tree Int comparable1 -> Element msg
+        viewRows w tree =
+            let
+                f : (comparable1, Tree Int comparable1) -> Element msg
+                f (c, subTree) = row
+                    [ width fill
+                    , height <| fillPortion <| getWidth subTree
+                    ]
+                    [ el [ width <| fillPortion 1 ] <| viewRow c
+                    , el [ width <| fillPortion (w-1) ] <| viewRows (w-1) subTree
+                    ]
+            in
+            case tree of
+                Leaf tbl -> 
+                    colPaths
+                        |> List.map (\path -> getAt path colGroup)
+                        |> List.map (Maybe.map getIndices >> Maybe.withDefault Set.empty)
+                        |> List.map (Set.intersect (getIndices tbl))
+                        |> List.map Set.toList
+                        |> List.map (List.filterMap getRowByIndex)
+                        |> List.map aggregator
+                        |> List.map viewAgg
+                        |> row [width <| fillPortion 1]
+                Node lst -> column [width fill] (List.map f lst)
+    in
+    column
+        [ width fill ]
+        [ row [width fill] [shim, viewColHeaderRows colGroup]
+        , viewRows (List.length rowHeaders + getWidth colGroup) rowGroup
+        ]
