@@ -3,6 +3,7 @@ module Table exposing
     , Table
     , emptyTable
     , makeTable
+    , Aggregator
     , pivotTable
     )
 
@@ -265,7 +266,10 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } tbl
                         shim =
                             td [ colspan <| List.length rowHeaders ] []
                     in
-                    tr [] (shim :: cells) :: viewColHeaders subTrees
+                    if List.length rowHeaders == 0 then
+                        tr [] cells :: viewColHeaders subTrees
+                    else
+                        tr [] (shim :: cells) :: viewColHeaders subTrees
 
         pathToTableItems : List (Maybe ( Int, comparable1 )) -> List (Html msg)
         pathToTableItems lst =
