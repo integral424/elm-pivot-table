@@ -235,12 +235,16 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } tbl
 
         viewColHeaderCells : Tree Int comparable2 -> List ( Html msg, Tree Int comparable2 )
         viewColHeaderCells tree =
+            let
+                f : (comparable2, Tree Int comparable2) -> ( Html msg, Tree Int comparable2 )
+                f (c, subTree) = (th [ colspan <| getWidth subTree ] [ viewCol c ], subTree)
+            in
             case tree of
                 Leaf _ ->
                     []
 
                 Node lst ->
-                    lst |> List.map (\( c, subTree ) -> ( th [ colspan <| getWidth subTree ] [ viewCol c ], subTree ))
+                    List.map f lst
 
         viewColHeaders : List (Tree Int comparable2) -> List (Html msg)
         viewColHeaders trees =
