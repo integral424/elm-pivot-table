@@ -33,9 +33,7 @@ import Element exposing
     , height
     , fill
     , fillPortion
-    , minimum
-    , alignLeft
-    , alignRight
+    , shrink
     )
 
 type Table row
@@ -183,6 +181,37 @@ getWidth tree =
 
         Node lst ->
             lst |> List.map (Tuple.second >> getWidth) |> List.sum
+
+{- breadth first traversal -}
+applyHorizontally : ((comparable, Tree row comparable) -> a) -> Tree row comparable -> List (List a)
+applyHorizontally f tree =
+    let
+        applyOneLevel : Tree row comparable -> List a
+        applyOneLevel tree_ =
+            case tree_ of
+                Leaf _ -> []
+                Node lst -> List.map f lst
+
+        getSubTrees : Tree row comparable -> List (Tree row comparable)
+        getSubTrees tree_ =
+            case tree_ of
+                Leaf _ -> []
+                Node lst -> List.map Tuple.second lst
+
+        g : List (Tree row comparable) -> List (List a) -> List (List a)
+        g trees prevResult =
+            let
+                result : List a
+                result = List.concatMap applyOneLevel trees
+
+                nextResult : List (List a)
+                nextResult = result :: prevResult
+            in
+            case result of
+                [] -> prevResult
+                _ ->  g (List.concatMap getSubTrees trees) nextResult
+    in
+    g [tree] [] |> List.reverse
 
 
 group : List (Column row comparable) -> Table row -> Tree row comparable
@@ -387,50 +416,37 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
         colGroup =
             group (List.map columnShim colHeaders) indexedTable |> mapTree Tuple.first
 
-        colPaths : List (TreePath comparable2)
-        colPaths =
-            getPaths colGroup
-        
-        shim : Element msg
-        shim = el [ width <| fillPortion <| List.length rowHeaders ] none
+        rowPaths : List (TreePath comparable1)
+        rowPaths =
+            getPaths rowGroup
 
-        viewColHeaderRows : Tree Int comparable2 -> Element msg
-        viewColHeaderRows tree =
-            let
-                f : (comparable2, Tree Int comparable2) -> Element msg
-                f (c, subTree) = column [ width <| fillPortion <| getWidth subTree ] [ viewCol c, viewColHeaderRows subTree ]
-            in
+        viewRowHeader : Int -> Tree Int comparable1 -> Element msg
+        viewRowHeader _ tree =
+            tree
+                |> applyHorizontally (\(c, subTree) -> el [ width fill, height <| fillPortion <| getWidth subTree ] <| viewRow c)
+                |> List.map (column [ width <| fillPortion 1, height fill ])
+                |> row [ width <| fillPortion <| List.length rowHeaders, height <| fillPortion <| getWidth rowGroup ]
+
+        viewRightPart : Int -> Tree Int comparable2 -> Element msg
+        viewRightPart h tree =
             case tree of
-                Leaf _ -> none
-                Node lst -> row [ width <| fillPortion <| getWidth tree ] (List.map f lst)
-        
-        viewRows : Int -> Tree Int comparable1 -> Element msg
-        viewRows w tree =
-            let
-                f : (comparable1, Tree Int comparable1) -> Element msg
-                f (c, subTree) = row
-                    [ width fill
-                    , height <| fillPortion <| getWidth subTree
-                    ]
-                    [ el [ width <| fillPortion 1 ] <| viewRow c
-                    , el [ width <| fillPortion (w-1) ] <| viewRows (w-1) subTree
-                    ]
-            in
-            case tree of
-                Leaf tbl -> 
-                    colPaths
-                        |> List.map (\path -> getAt path colGroup)
+                Leaf tbl ->
+                    rowPaths
+                        |> List.map (\path -> getAt path rowGroup)
                         |> List.map (Maybe.map getIndices >> Maybe.withDefault Set.empty)
                         |> List.map (Set.intersect (getIndices tbl))
                         |> List.map Set.toList
                         |> List.map (List.filterMap getRowByIndex)
                         |> List.map aggregator
                         |> List.map viewAgg
-                        |> row [width <| fillPortion 1]
-                Node lst -> column [width fill] (List.map f lst)
+                        |> column [width <| fillPortion 1, height <| fillPortion <| h]
+                Node lst ->
+                    lst
+                        |> List.map (\(c, subTree) -> column [width <| fillPortion <| getWidth subTree, height fill ] [ el [width fill, height fill] <| viewCol c, viewRightPart (h-1) subTree ])
+                        |> row [ width fill, height fill ]
     in
-    column
+    row
         [ width fill ]
-        [ row [width fill] [shim, viewColHeaderRows colGroup]
-        , viewRows (List.length rowHeaders + getWidth colGroup) rowGroup
+        [ column [ width shrink, height fill ] [ el [ width fill, height <| fillPortion <| List.length colHeaders ] <| Element.none, el [width fill] <| viewRowHeader (List.length rowHeaders) rowGroup ]
+        , el [ width shrink, height fill ] <| viewRightPart (List.length colHeaders + getWidth rowGroup) colGroup
         ]
