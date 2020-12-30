@@ -1,7 +1,7 @@
 {
     "type": "package",
-    "name": "integral424/pivot-table",
-    "summary": "Show pivot table",
+    "name": "integral424/elm-pivot-table",
+    "summary": "Analyze and visualize your table data by grouping by various fields",
     "license": "BSD-3-Clause",
     "version": "1.0.0",
     "exposed-modules": [
