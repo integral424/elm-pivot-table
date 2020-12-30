@@ -1,4 +1,4 @@
-module Table exposing
+module PivotTable exposing
     ( Table, Field
     , makeTable, getField
     , Aggregator, pivotTable, pivotTableHtml
@@ -36,10 +36,11 @@ a table to show values grouped by some fields.
         { rowHeaders = []
         , colHeaders = [ genderField ]
         , aggregator = List.length
-        , viewRow = Element.none
+        , viewRow = always Element.none
         , viewCol = Element.text
         , viewAgg = String.fromInt >> Element.text
         }
+        myTable
 
 The code above produces a table:
 
