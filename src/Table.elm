@@ -1,8 +1,8 @@
 module Table exposing
-    ( Column
+    ( Field
     , Table
     , makeTable
-    , getColumn
+    , getField
     , Aggregator
     , pivotTable
     , pivotTableHtml
@@ -12,14 +12,14 @@ module Table exposing
 you can analyze and visualize your data by grouping various fields.
 
 # Definition
-@docs Table, Column
+@docs Table, Field
 
 # Table operations
-@docs makeTable, getColumn
+@docs makeTable, getField
 
 # Pivot table
 In this package, a pivot table is
-a table to show values grouped by some columns.
+a table to show values grouped by some fields.
 
 ## Example 1
 
@@ -31,7 +31,7 @@ a table to show values grouped by some columns.
 
     pivotTable
         { rowHeaders = []
-        , colHeaders = [ genderColumn ]
+        , colHeaders = [ genderField ]
         , aggregator = List.length
         , viewRow = Element.none
         , viewCol = Element.text
@@ -111,17 +111,17 @@ makeTable : List row -> Table row
 makeTable rows =
     Table rows
 
-{-| In this package, a column is defined as a function from row to something. -}
-type alias Column row a = row -> a
+{-| In this package, a field is defined as a function from row to something. -}
+type alias Field row a = row -> a
 
 {-| A function to get values from a table.
 
 With the example appeared in the [`Table` doc](#Table),
-each column can be accessed like:
+each field can be accessed like:
 
-    nameColumn = .name
-    ageColumn = .age
-    genderColumn = .gender
+    nameField = .name
+    ageField = .age
+    genderField = .gender
 
     myTable : MyTable
     myTable = makeTable
@@ -130,19 +130,19 @@ each column can be accessed like:
         , { name = "Charlie", age = 35, gender = Male   }
         ]
 
-    getColumn nameColumn myTable   -- ["Alice", "Bob", "Charlie"]
-    getColumn ageColumn myTable    -- [17, 8, 35]
-    getColumn genderColumn myTable -- [Female, Male, Male]
+    getField nameField myTable   -- ["Alice", "Bob", "Charlie"]
+    getField ageField myTable    -- [17, 8, 35]
+    getField genderField myTable -- [Female, Male, Male]
 
-**Note:** Notice that a column does not have to be a record element.
+**Note:** Notice that a field does not have to be a record element.
 This is a valid code:
 
-    nameInitialLetterColumn = .name >> String.left 1
+    nameInitialLetterField = .name >> String.left 1
 
-    getColumn nameInitialLetterColumn myTable -- ["A", "B", "C"]
+    getField nameInitialLetterField myTable -- ["A", "B", "C"]
 -}
-getColumn : Column row a -> Table row -> List a
-getColumn col (Table rows) = List.map col rows
+getField : Field row a -> Table row -> List a
+getField field (Table rows) = List.map field rows
 
 
 length : Table row -> Int
@@ -160,12 +160,12 @@ indexedMap f (Table rows) =
     rows |> List.indexedMap f |> Table
 
 
-groupByColumn : Column row comparable -> Table row -> List ( comparable, Table row )
-groupByColumn col (Table rows) =
+groupByField : Field row comparable -> Table row -> List ( comparable, Table row )
+groupByField field (Table rows) =
     rows
-        |> List.sortBy col
-        |> List.Extra.groupWhile (\r1 r2 -> col r1 == col r2)
-        |> List.map (\( first, rest ) -> ( col first, Table (first :: rest) ))
+        |> List.sortBy field
+        |> List.Extra.groupWhile (\r1 r2 -> field r1 == field r2)
+        |> List.map (\( first, rest ) -> ( field first, Table (first :: rest) ))
 
 
 type Tree row comparable
@@ -296,23 +296,23 @@ applyHorizontally f tree =
     g [tree] [] |> List.reverse
 
 
-group : List (Column row comparable) -> Table row -> Tree row comparable
-group cols tbl =
+group : List (Field row comparable) -> Table row -> Tree row comparable
+group fields tbl =
     let
-        reduce : Column row comparable -> Tree row comparable -> Tree row comparable
-        reduce col tree =
+        reduce : Field row comparable -> Tree row comparable -> Tree row comparable
+        reduce field tree =
             case tree of
                 Leaf tbl_ ->
-                    groupByColumn col tbl_
+                    groupByField field tbl_
                         |> List.map (Tuple.mapSecond Leaf)
                         |> Node
 
                 Node lst ->
                     lst
-                        |> List.map (Tuple.mapSecond (reduce col))
+                        |> List.map (Tuple.mapSecond (reduce field))
                         |> Node
     in
-    List.foldl reduce (Leaf tbl) cols
+    List.foldl reduce (Leaf tbl) fields
 
 {-| The pivot table groups table rows.
 After that, the `Aggregator` aggregates
@@ -327,8 +327,8 @@ This view makes use of `colspan` and `rowspan` attributes of html table.
 Use this view function when you want to avoid using `elm-ui`.
 -}
 pivotTableHtml :
-    { rowHeaders : List (Column row comparable1)
-    , colHeaders : List (Column row comparable2)
+    { rowHeaders : List (Field row comparable1)
+    , colHeaders : List (Field row comparable2)
     , aggregator : Aggregator row agg
     , viewRow : comparable1 -> Html msg
     , viewCol : comparable2 -> Html msg
@@ -347,7 +347,7 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
             List.Extra.getAt index lst
 
         -- ignore index
-        columnShim : Column row comparable -> Column ( Int, row ) comparable
+        columnShim : Field row comparable -> Field ( Int, row ) comparable
         columnShim col =
             Tuple.second >> col
 
@@ -361,6 +361,7 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
 
         -- rowPaths : List (TreePath comparable1)
         -- rowPaths = getPaths rowGroup
+
         colPaths : List (TreePath comparable2)
         colPaths =
             getPaths colGroup
@@ -469,14 +470,14 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
 
 {-| Draws a pivot table.
 
-* `rowHeaders` is a list of `Column`'s to group and generates grouped *rows*.
-* `colHeaders` is a list of `Column`'s to group and generates grouped *columns*.
+* `rowHeaders` is a list of `Field`'s to group and generates grouped *rows*.
+* `colHeaders` is a list of `Field`'s to group and generates grouped *columns*.
 * `aggregator` aggregates each grouped set of table data into a single value.
 * `viewRow`, `viewCol` and `viewAgg` are view functions to show each headers and cells.
 -}
 pivotTable :
-    { rowHeaders : List (Column row comparable1)
-    , colHeaders : List (Column row comparable2)
+    { rowHeaders : List (Field row comparable1)
+    , colHeaders : List (Field row comparable2)
     , aggregator : Aggregator row agg
     , viewRow : comparable1 -> Element msg
     , viewCol : comparable2 -> Element msg
@@ -500,9 +501,9 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
             Set.fromList indices
 
         -- ignore index
-        columnShim : Column row comparable -> Column ( Int, row ) comparable
-        columnShim col =
-            Tuple.second >> col
+        columnShim : Field row comparable -> Field ( Int, row ) comparable
+        columnShim field =
+            Tuple.second >> field
 
         rowGroup : Tree Int comparable1
         rowGroup =
