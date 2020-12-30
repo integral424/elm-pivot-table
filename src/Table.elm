@@ -145,38 +145,114 @@ getField : Field row a -> Table row -> List a
 getField field (Table rows) = List.map field rows
 
 
+-- Utility functions for `Table`
 length : Table row -> Int
 length (Table rows) =
     List.length rows
 
-
 map : (row1 -> row2) -> Table row1 -> Table row2
 map f (Table rows) =
     rows |> List.map f |> Table
-
 
 indexedMap : (Int -> row1 -> row2) -> Table row1 -> Table row2
 indexedMap f (Table rows) =
     rows |> List.indexedMap f |> Table
 
 
+-- Grouping functions
+
+{-| Group rows by a given field, that is, the same group has the same field value.
+
+Result is a list of groups.
+A group is composed of a field value (of type `comparable`) and a table value.
+All rows in this table has the same field value.
+-}
 groupByField : Field row comparable -> Table row -> List ( comparable, Table row )
 groupByField field (Table rows) =
     rows
-        |> List.sortBy field
+        |> List.sortBy field   -- sorting is necessary for `List.Extra.groupWhile`
         |> List.Extra.groupWhile (\r1 r2 -> field r1 == field r2)
         |> List.map (\( first, rest ) -> ( field first, Table (first :: rest) ))
 
+{-| Group rows by given several fields.
 
+Notice that group of a group forms a tree.
+See [`Tree` definition](#Tree) for detail.
+-}
+group : List (Field row comparable) -> Table row -> Tree row comparable
+group fields tbl =
+    let
+        reduce : Field row comparable -> Tree row comparable -> Tree row comparable
+        reduce field tree =
+            case tree of
+                Leaf tbl_ ->
+                    groupByField field tbl_
+                        |> List.map (Tuple.mapSecond Leaf)
+                        |> Node
+
+                Node lst ->
+                    lst
+                        |> List.map (Tuple.mapSecond (reduce field))
+                        |> Node
+    in
+    List.foldl reduce (Leaf tbl) fields
+
+{-| A type representing a result of the `group` function.
+
+Grouping by several fields forms a tree.
+
+## Example
+
+    myTable2 = makeTable
+        [ { col1 = "A", col2 = 1, col3 = "a", col4 = 1 }
+        , { col1 = "A", col2 = 1, col3 = "b", col4 = 2 }
+        , { col1 = "A", col2 = 2, col3 = "a", col4 = 1 }
+        , { col1 = "A", col2 = 2, col3 = "b", col4 = 2 }
+        , { col1 = "A", col2 = 2, col3 = "c", col4 = 3 }
+        , { col1 = "A", col2 = 3, col3 = "a", col4 = 1 }
+        , { col1 = "A", col2 = 3, col3 = "a", col4 = 2 }
+        , { col1 = "B", col2 = 2, col3 = "a", col4 = 1 }
+        , { col1 = "B", col2 = 2, col3 = "b", col4 = 2 }
+        , { col1 = "B", col2 = 2, col3 = "c", col4 = 3 }
+        ]
+
+* col1 = "A"
+  * col2 = 1
+    * col3 = "a"
+      * row#1
+    * col3 = *b
+      * row#2
+  * col2 = 2
+    * col3 = "a"
+      * row#3
+    * col3 = "b"
+      * row#4
+    * col3 = "c"
+      * row#5
+  * col2 = 3
+    * col3 = "a"
+      * row#6, row#7
+* col1 = "B"
+  * col2 = 2
+    * col3 = "a"
+      * row#8
+    * col3 = "b"
+      * row#9
+    * col3 = "c"
+      * row#10
+-}
 type Tree row comparable
     = Node (List ( comparable, Tree row comparable ))
     | Leaf (Table row)
 
 
+-- Tree utility functions
+
+{-| A path of a tree from the root to a leaf -}
 type alias TreePath comparable =
     List comparable
 
-
+{-| Get a tree by path. -}
 getTreeAt : TreePath comparable -> Tree row comparable -> Maybe (Tree row comparable)
 getTreeAt path tree =
     case path of
@@ -194,7 +270,7 @@ getTreeAt path tree =
                         |> List.head
                         |> Maybe.andThen (\( _, subTree ) -> getTreeAt rest subTree)
 
-
+{-| Get a tree by path, only when the path reaches a leaf. -}
 getAt : TreePath comparable -> Tree row comparable -> Maybe (Table row)
 getAt path tree =
     case getTreeAt path tree of
@@ -207,7 +283,7 @@ getAt path tree =
         Just (Leaf tbl) ->
             Just tbl
 
-
+{-| Get possible paths from given tree. -}
 getPaths : Tree row comparable -> List (TreePath comparable)
 getPaths tree =
     case tree of
@@ -219,7 +295,7 @@ getPaths tree =
                 |> List.map (Tuple.mapSecond getPaths)
                 |> List.concatMap (\( c, paths ) -> paths |> List.map (\path -> c :: path))
 
-
+{-| Convert row type into another type. -}
 mapTree : (row1 -> row2) -> Tree row1 comparable -> Tree row2 comparable
 mapTree f tree =
     case tree of
@@ -231,20 +307,10 @@ mapTree f tree =
         Leaf tbl ->
             Leaf (map f tbl)
 
+{-| Extract all `Table` values from given tree.
 
-
--- treeToTable : Tree row comparable -> Table row
--- treeToTable tree =
---     let
---         f : Tree row comparable -> List row
---         f subTree =
---             case subTree of
---                 Leaf (Table rows) -> rows
---                 Node lst -> lst |> List.concatMap (Tuple.second >> f)
---     in
---     f tree |> Table
-
-
+The result is a list of tables ordered by depth-first-search order.
+-}
 treeToTableList : Tree row comparable -> List (Table row)
 treeToTableList tree =
     case tree of
@@ -254,7 +320,7 @@ treeToTableList tree =
         Node lst ->
             List.concatMap (Tuple.second >> treeToTableList) lst
 
-
+{-| Get the width of a tree, which is the number of leafs the tree has. -}
 getWidth : Tree row comparable -> Int
 getWidth tree =
     case tree of
@@ -264,7 +330,16 @@ getWidth tree =
         Node lst ->
             lst |> List.map (Tuple.second >> getWidth) |> List.sum
 
-{- breadth first traversal -}
+{-| Apply a function in breadth-first-search order.
+
+The result is a list of each levels result, that is:
+
+    result = applyHorizontally f tree
+
+    List.Extra.getAt 0 result == Just firstDepthResult
+    List.Extra.getAt 1 result == Just secondDepthResult
+    List.Extra.getAt 2 result == Just thirdDepthResult
+-}
 applyHorizontally : ((comparable, Tree row comparable) -> a) -> Tree row comparable -> List (List a)
 applyHorizontally f tree =
     let
@@ -296,23 +371,7 @@ applyHorizontally f tree =
     g [tree] [] |> List.reverse
 
 
-group : List (Field row comparable) -> Table row -> Tree row comparable
-group fields tbl =
-    let
-        reduce : Field row comparable -> Tree row comparable -> Tree row comparable
-        reduce field tree =
-            case tree of
-                Leaf tbl_ ->
-                    groupByField field tbl_
-                        |> List.map (Tuple.mapSecond Leaf)
-                        |> Node
-
-                Node lst ->
-                    lst
-                        |> List.map (Tuple.mapSecond (reduce field))
-                        |> Node
-    in
-    List.foldl reduce (Leaf tbl) fields
+-- Pivot table functions
 
 {-| The pivot table groups table rows.
 After that, the `Aggregator` aggregates
@@ -517,8 +576,8 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
         rowPaths =
             getPaths rowGroup
 
-        viewRowHeader : Int -> Tree Int comparable1 -> Element msg
-        viewRowHeader _ tree =
+        viewRowHeader : Tree Int comparable1 -> Element msg
+        viewRowHeader tree =
             tree
                 |> applyHorizontally (\(c, subTree) -> el [ width fill, height <| fillPortion <| getWidth subTree ] <| viewRow c)
                 |> List.map (column [ width <| fillPortion 1, height fill ])
@@ -544,6 +603,6 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
     in
     row
         [ width fill ]
-        [ column [ width shrink, height fill ] [ el [ width fill, height <| fillPortion <| List.length colHeaders ] <| Element.none, el [width fill] <| viewRowHeader (List.length rowHeaders) rowGroup ]
+        [ column [ width shrink, height fill ] [ el [ width fill, height <| fillPortion <| List.length colHeaders ] <| Element.none, el [width fill] <| viewRowHeader rowGroup ]
         , el [ width shrink, height fill ] <| viewRightPart (List.length colHeaders + getWidth rowGroup) colGroup
         ]
