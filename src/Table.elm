@@ -1,13 +1,55 @@
 module Table exposing
     ( Column
     , Table
-    , emptyTable
     , makeTable
+    , getColumn
     , Aggregator
     , pivotTable
     , pivotTableHtml
     )
 
+{-| This package provides a pivot table view function with which
+you can analyze and visualize your data by grouping various fields.
+
+# Definition
+@docs Table, Column
+
+# Table operations
+@docs makeTable, getColumn
+
+# Pivot table
+In this package, a pivot table is
+a table to show values grouped by some columns.
+
+## Example 1
+
+    genderToString : Gender -> String
+    genderToString gender =
+        case gender of
+            Male   -> "Male"
+            Female -> "Female"
+
+    pivotTable
+        { rowHeaders = []
+        , colHeaders = [ genderColumn ]
+        , aggregator = List.length
+        , viewRow = Element.none
+        , viewCol = Element.text
+        , viewAgg = String.fromInt >> Element.text
+        }
+
+The code above produces a table:
+
+
+|Male |Female |
+|-----|-------|
+|2    |1      |
+
+
+@docs Aggregator, pivotTable, pivotTableHtml
+-}
+
+{- imports from standard libraries -}
 import Html exposing
     ( Html
     , table
@@ -20,9 +62,12 @@ import Html.Attributes exposing
     , rowspan
     )
 import Array exposing (Array)
-import List.Extra
 import Set exposing (Set)
 
+{- imports from community libraries -}
+import List.Extra
+
+{- imports from elm-ui -}
 import Element exposing
     ( Element
     , none
@@ -36,27 +81,68 @@ import Element exposing
     , shrink
     )
 
+{-| In this package, a table is defined as a list of rows.
+
+In the most naive case, a table may be represented by a list of records like:
+
+    type alias Person =
+        { name : String
+        , age : Int
+        , gender : Gender
+        }
+
+    type Gender
+        = Male
+        | Female
+
+    type alias MyTable = Table Person
+
+**Note:** Notice that rows can be any type.
+-}
 type Table row
     = Table (List row)
 
+{-| A function to create a table.
 
-type alias Column row a =
-    row -> a
-
-
+Since the `Table` is an opaque type, all user of this package must use this
+function to create a `Table` value.
+-}
 makeTable : List row -> Table row
 makeTable rows =
     Table rows
 
+{-| In this package, a column is defined as a function from row to something. -}
+type alias Column row a = row -> a
 
-emptyTable : Table row
-emptyTable =
-    Table []
+{-| A function to get values from a table.
 
+With the example appeared in the [`Table` doc](#Table),
+each column can be accessed like:
 
+    nameColumn = .name
+    ageColumn = .age
+    genderColumn = .gender
 
---getColumn : Column row a -> Table row -> List a
---getColumn col (Table rows) = List.map col rows
+    myTable : MyTable
+    myTable = makeTable
+        [ { name = "Alice",   age = 17, gender = Female }
+        , { name = "Bob",     age = 8,  gender = Male   }
+        , { name = "Charlie", age = 35, gender = Male   }
+        ]
+
+    getColumn nameColumn myTable   -- ["Alice", "Bob", "Charlie"]
+    getColumn ageColumn myTable    -- [17, 8, 35]
+    getColumn genderColumn myTable -- [Female, Male, Male]
+
+**Note:** Notice that a column does not have to be a record element.
+This is a valid code:
+
+    nameInitialLetterColumn = .name >> String.left 1
+
+    getColumn nameInitialLetterColumn myTable -- ["A", "B", "C"]
+-}
+getColumn : Column row a -> Table row -> List a
+getColumn col (Table rows) = List.map col rows
 
 
 length : Table row -> Int
@@ -67,10 +153,6 @@ length (Table rows) =
 map : (row1 -> row2) -> Table row1 -> Table row2
 map f (Table rows) =
     rows |> List.map f |> Table
-
-
-
---map f = getColumn f >> Table
 
 
 indexedMap : (Int -> row1 -> row2) -> Table row1 -> Table row2
@@ -232,18 +314,25 @@ group cols tbl =
     in
     List.foldl reduce (Leaf tbl) cols
 
+{-| The pivot table groups table rows.
+After that, the `Aggregator` aggregates
+the list of rows into a single value (of any type).
+-}
+type alias Aggregator row agg = List row -> agg
 
-type alias Aggregator row comparable =
-    List row -> comparable
 
+{-| Draws a pivot table of `Html` type.
 
+This view makes use of `colspan` and `rowspan` attributes of html table.
+Use this view function when you want to avoid using `elm-ui`.
+-}
 pivotTableHtml :
     { rowHeaders : List (Column row comparable1)
     , colHeaders : List (Column row comparable2)
-    , aggregator : Aggregator row comparable3
+    , aggregator : Aggregator row agg
     , viewRow : comparable1 -> Html msg
     , viewCol : comparable2 -> Html msg
-    , viewAgg : comparable3 -> Html msg
+    , viewAgg : agg -> Html msg
     }
     -> Table row
     -> Html msg
@@ -378,13 +467,20 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
     in
     viewColHeaders [ colGroup ] ++ viewRows rowGroup |> table []
 
+{-| Draws a pivot table.
+
+* `rowHeaders` is a list of `Column`'s to group and generates grouped *rows*.
+* `colHeaders` is a list of `Column`'s to group and generates grouped *columns*.
+* `aggregator` aggregates each grouped set of table data into a single value.
+* `viewRow`, `viewCol` and `viewAgg` are view functions to show each headers and cells.
+-}
 pivotTable :
     { rowHeaders : List (Column row comparable1)
     , colHeaders : List (Column row comparable2)
-    , aggregator : Aggregator row comparable3
+    , aggregator : Aggregator row agg
     , viewRow : comparable1 -> Element msg
     , viewCol : comparable2 -> Element msg
-    , viewAgg : comparable3 -> Element msg
+    , viewAgg : agg -> Element msg
     }
     -> Table row
     -> Element msg
