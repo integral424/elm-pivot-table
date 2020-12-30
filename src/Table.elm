@@ -1,25 +1,28 @@
 module Table exposing
-    ( Field
-    , Table
-    , makeTable
-    , getField
-    , Aggregator
-    , pivotTable
-    , pivotTableHtml
+    ( Table, Field
+    , makeTable, getField
+    , Aggregator, pivotTable, pivotTableHtml
     )
 
 {-| This package provides a pivot table view function with which
 you can analyze and visualize your data by grouping various fields.
 
+
 # Definition
+
 @docs Table, Field
 
+
 # Table operations
+
 @docs makeTable, getField
 
+
 # Pivot table
+
 In this package, a pivot table is
 a table to show values grouped by some fields.
+
 
 ## Example 1
 
@@ -40,46 +43,46 @@ a table to show values grouped by some fields.
 
 The code above produces a table:
 
-
+```text
 |Male |Female |
 |-----|-------|
 |2    |1      |
-
+```
 
 @docs Aggregator, pivotTable, pivotTableHtml
+
 -}
 
-{- imports from standard libraries -}
-import Html exposing
-    ( Html
-    , table
-    , td
-    , th
-    , tr
-    )
-import Html.Attributes exposing
-    ( colspan
-    , rowspan
-    )
 import Array exposing (Array)
+import Element
+    exposing
+        ( Element
+        , column
+        , el
+        , fill
+        , fillPortion
+        , height
+        , none
+        , row
+        , shrink
+        , width
+        )
+import Html
+    exposing
+        ( Html
+        , table
+        , td
+        , th
+        , tr
+        )
+import Html.Attributes
+    exposing
+        ( colspan
+        , rowspan
+        )
+import List.Extra
 import Set exposing (Set)
 
-{- imports from community libraries -}
-import List.Extra
-
-{- imports from elm-ui -}
-import Element exposing
-    ( Element
-    , none
-    , el
-    , row
-    , column
-    , width
-    , height
-    , fill
-    , fillPortion
-    , shrink
-    )
 
 {-| In this package, a table is defined as a list of rows.
 
@@ -95,24 +98,32 @@ In the most naive case, a table may be represented by a list of records like:
         = Male
         | Female
 
-    type alias MyTable = Table Person
+    type alias MyTable =
+        Table Person
 
 **Note:** Notice that rows can be any type.
+
 -}
 type Table row
     = Table (List row)
+
 
 {-| A function to create a table.
 
 Since the `Table` is an opaque type, all user of this package must use this
 function to create a `Table` value.
+
 -}
 makeTable : List row -> Table row
 makeTable rows =
     Table rows
 
-{-| In this package, a field is defined as a function from row to something. -}
-type alias Field row a = row -> a
+
+{-| In this package, a field is defined as a function from row to something.
+-}
+type alias Field row a =
+    row -> a
+
 
 {-| A function to get values from a table.
 
@@ -140,44 +151,57 @@ This is a valid code:
     nameInitialLetterField = .name >> String.left 1
 
     getField nameInitialLetterField myTable -- ["A", "B", "C"]
+
 -}
 getField : Field row a -> Table row -> List a
-getField field (Table rows) = List.map field rows
+getField field (Table rows) =
+    List.map field rows
+
 
 
 -- Utility functions for `Table`
+
+
 length : Table row -> Int
 length (Table rows) =
     List.length rows
 
+
 map : (row1 -> row2) -> Table row1 -> Table row2
 map f (Table rows) =
     rows |> List.map f |> Table
+
 
 indexedMap : (Int -> row1 -> row2) -> Table row1 -> Table row2
 indexedMap f (Table rows) =
     rows |> List.indexedMap f |> Table
 
 
+
 -- Grouping functions
+
 
 {-| Group rows by a given field, that is, the same group has the same field value.
 
 Result is a list of groups.
 A group is composed of a field value (of type `comparable`) and a table value.
 All rows in this table has the same field value.
+
 -}
 groupByField : Field row comparable -> Table row -> List ( comparable, Table row )
 groupByField field (Table rows) =
     rows
-        |> List.sortBy field   -- sorting is necessary for `List.Extra.groupWhile`
+        |> List.sortBy field
+        -- sorting is necessary for `List.Extra.groupWhile`
         |> List.Extra.groupWhile (\r1 r2 -> field r1 == field r2)
         |> List.map (\( first, rest ) -> ( field first, Table (first :: rest) ))
+
 
 {-| Group rows by given several fields.
 
 Notice that group of a group forms a tree.
 See [`Tree` definition](#Tree) for detail.
+
 -}
 group : List (Field row comparable) -> Table row -> Tree row comparable
 group fields tbl =
@@ -197,62 +221,71 @@ group fields tbl =
     in
     List.foldl reduce (Leaf tbl) fields
 
+
 {-| A type representing a result of the `group` function.
 
 Grouping by several fields forms a tree.
 
+
 ## Example
 
-    myTable2 = makeTable
-        [ { col1 = "A", col2 = 1, col3 = "a", col4 = 1 }
-        , { col1 = "A", col2 = 1, col3 = "b", col4 = 2 }
-        , { col1 = "A", col2 = 2, col3 = "a", col4 = 1 }
-        , { col1 = "A", col2 = 2, col3 = "b", col4 = 2 }
-        , { col1 = "A", col2 = 2, col3 = "c", col4 = 3 }
-        , { col1 = "A", col2 = 3, col3 = "a", col4 = 1 }
-        , { col1 = "A", col2 = 3, col3 = "a", col4 = 2 }
-        , { col1 = "B", col2 = 2, col3 = "a", col4 = 1 }
-        , { col1 = "B", col2 = 2, col3 = "b", col4 = 2 }
-        , { col1 = "B", col2 = 2, col3 = "c", col4 = 3 }
-        ]
+    myTable2 =
+        makeTable
+            [ { col1 = "A", col2 = 1, col3 = "a", col4 = 1 }
+            , { col1 = "A", col2 = 1, col3 = "b", col4 = 2 }
+            , { col1 = "A", col2 = 2, col3 = "a", col4 = 1 }
+            , { col1 = "A", col2 = 2, col3 = "b", col4 = 2 }
+            , { col1 = "A", col2 = 2, col3 = "c", col4 = 3 }
+            , { col1 = "A", col2 = 3, col3 = "a", col4 = 1 }
+            , { col1 = "A", col2 = 3, col3 = "a", col4 = 2 }
+            , { col1 = "B", col2 = 2, col3 = "a", col4 = 1 }
+            , { col1 = "B", col2 = 2, col3 = "b", col4 = 2 }
+            , { col1 = "B", col2 = 2, col3 = "c", col4 = 3 }
+            ]
 
-* col1 = "A"
-  * col2 = 1
-    * col3 = "a"
-      * row#1
-    * col3 = *b
-      * row#2
-  * col2 = 2
-    * col3 = "a"
-      * row#3
-    * col3 = "b"
-      * row#4
-    * col3 = "c"
-      * row#5
-  * col2 = 3
-    * col3 = "a"
-      * row#6, row#7
-* col1 = "B"
-  * col2 = 2
-    * col3 = "a"
-      * row#8
-    * col3 = "b"
-      * row#9
-    * col3 = "c"
-      * row#10
+  - col1 = "A"
+      - col2 = 1
+          - col3 = "a"
+              - row#1
+          - col3 = \*b
+              - row#2
+      - col2 = 2
+          - col3 = "a"
+              - row#3
+          - col3 = "b"
+              - row#4
+          - col3 = "c"
+              - row#5
+      - col2 = 3
+          - col3 = "a"
+              - row#6, row#7
+  - col1 = "B"
+      - col2 = 2
+          - col3 = "a"
+              - row#8
+          - col3 = "b"
+              - row#9
+          - col3 = "c"
+              - row#10
+
 -}
 type Tree row comparable
     = Node (List ( comparable, Tree row comparable ))
     | Leaf (Table row)
 
 
+
 -- Tree utility functions
 
-{-| A path of a tree from the root to a leaf -}
+
+{-| A path of a tree from the root to a leaf
+-}
 type alias TreePath comparable =
     List comparable
 
-{-| Get a tree by path. -}
+
+{-| Get a tree by path.
+-}
 getTreeAt : TreePath comparable -> Tree row comparable -> Maybe (Tree row comparable)
 getTreeAt path tree =
     case path of
@@ -270,7 +303,9 @@ getTreeAt path tree =
                         |> List.head
                         |> Maybe.andThen (\( _, subTree ) -> getTreeAt rest subTree)
 
-{-| Get a tree by path, only when the path reaches a leaf. -}
+
+{-| Get a tree by path, only when the path reaches a leaf.
+-}
 getAt : TreePath comparable -> Tree row comparable -> Maybe (Table row)
 getAt path tree =
     case getTreeAt path tree of
@@ -283,7 +318,9 @@ getAt path tree =
         Just (Leaf tbl) ->
             Just tbl
 
-{-| Get possible paths from given tree. -}
+
+{-| Get possible paths from given tree.
+-}
 getPaths : Tree row comparable -> List (TreePath comparable)
 getPaths tree =
     case tree of
@@ -295,7 +332,9 @@ getPaths tree =
                 |> List.map (Tuple.mapSecond getPaths)
                 |> List.concatMap (\( c, paths ) -> paths |> List.map (\path -> c :: path))
 
-{-| Convert row type into another type. -}
+
+{-| Convert row type into another type.
+-}
 mapTree : (row1 -> row2) -> Tree row1 comparable -> Tree row2 comparable
 mapTree f tree =
     case tree of
@@ -307,9 +346,11 @@ mapTree f tree =
         Leaf tbl ->
             Leaf (map f tbl)
 
+
 {-| Extract all `Table` values from given tree.
 
 The result is a list of tables ordered by depth-first-search order.
+
 -}
 treeToTableList : Tree row comparable -> List (Table row)
 treeToTableList tree =
@@ -320,7 +361,9 @@ treeToTableList tree =
         Node lst ->
             List.concatMap (Tuple.second >> treeToTableList) lst
 
-{-| Get the width of a tree, which is the number of leafs the tree has. -}
+
+{-| Get the width of a tree, which is the number of leafs the tree has.
+-}
 getWidth : Tree row comparable -> Int
 getWidth tree =
     case tree of
@@ -329,6 +372,7 @@ getWidth tree =
 
         Node lst ->
             lst |> List.map (Tuple.second >> getWidth) |> List.sum
+
 
 {-| Apply a function in breadth-first-search order.
 
@@ -339,51 +383,67 @@ The result is a list of each levels result, that is:
     List.Extra.getAt 0 result == Just firstDepthResult
     List.Extra.getAt 1 result == Just secondDepthResult
     List.Extra.getAt 2 result == Just thirdDepthResult
+
 -}
-applyHorizontally : ((comparable, Tree row comparable) -> a) -> Tree row comparable -> List (List a)
+applyHorizontally : (( comparable, Tree row comparable ) -> a) -> Tree row comparable -> List (List a)
 applyHorizontally f tree =
     let
         applyOneLevel : Tree row comparable -> List a
         applyOneLevel tree_ =
             case tree_ of
-                Leaf _ -> []
-                Node lst -> List.map f lst
+                Leaf _ ->
+                    []
+
+                Node lst ->
+                    List.map f lst
 
         getSubTrees : Tree row comparable -> List (Tree row comparable)
         getSubTrees tree_ =
             case tree_ of
-                Leaf _ -> []
-                Node lst -> List.map Tuple.second lst
+                Leaf _ ->
+                    []
+
+                Node lst ->
+                    List.map Tuple.second lst
 
         g : List (Tree row comparable) -> List (List a) -> List (List a)
         g trees prevResult =
             let
                 result : List a
-                result = List.concatMap applyOneLevel trees
+                result =
+                    List.concatMap applyOneLevel trees
 
                 nextResult : List (List a)
-                nextResult = result :: prevResult
+                nextResult =
+                    result :: prevResult
             in
             case result of
-                [] -> prevResult
-                _ ->  g (List.concatMap getSubTrees trees) nextResult
+                [] ->
+                    prevResult
+
+                _ ->
+                    g (List.concatMap getSubTrees trees) nextResult
     in
-    g [tree] [] |> List.reverse
+    g [ tree ] [] |> List.reverse
+
 
 
 -- Pivot table functions
+
 
 {-| The pivot table groups table rows.
 After that, the `Aggregator` aggregates
 the list of rows into a single value (of any type).
 -}
-type alias Aggregator row agg = List row -> agg
+type alias Aggregator row agg =
+    List row -> agg
 
 
 {-| Draws a pivot table of `Html` type.
 
 This view makes use of `colspan` and `rowspan` attributes of html table.
 Use this view function when you want to avoid using `elm-ui`.
+
 -}
 pivotTableHtml :
     { rowHeaders : List (Field row comparable1)
@@ -420,7 +480,6 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
 
         -- rowPaths : List (TreePath comparable1)
         -- rowPaths = getPaths rowGroup
-
         colPaths : List (TreePath comparable2)
         colPaths =
             getPaths colGroup
@@ -428,8 +487,9 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
         viewColHeaderCells : Tree Int comparable2 -> List ( Html msg, Tree Int comparable2 )
         viewColHeaderCells tree =
             let
-                f : (comparable2, Tree Int comparable2) -> ( Html msg, Tree Int comparable2 )
-                f (c, subTree) = (th [ colspan <| getWidth subTree ] [ viewCol c ], subTree)
+                f : ( comparable2, Tree Int comparable2 ) -> ( Html msg, Tree Int comparable2 )
+                f ( c, subTree ) =
+                    ( th [ colspan <| getWidth subTree ] [ viewCol c ], subTree )
             in
             case tree of
                 Leaf _ ->
@@ -464,6 +524,7 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
                     in
                     if List.length rowHeaders == 0 then
                         tr [] cells :: viewColHeaders subTrees
+
                     else
                         tr [] (shim :: cells) :: viewColHeaders subTrees
 
@@ -527,12 +588,14 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
     in
     viewColHeaders [ colGroup ] ++ viewRows rowGroup |> table []
 
+
 {-| Draws a pivot table.
 
-* `rowHeaders` is a list of `Field`'s to group and generates grouped *rows*.
-* `colHeaders` is a list of `Field`'s to group and generates grouped *columns*.
-* `aggregator` aggregates each grouped set of table data into a single value.
-* `viewRow`, `viewCol` and `viewAgg` are view functions to show each headers and cells.
+  - `rowHeaders` is a list of `Field`'s to group and generates grouped _rows_.
+  - `colHeaders` is a list of `Field`'s to group and generates grouped _columns_.
+  - `aggregator` aggregates each grouped set of table data into a single value.
+  - `viewRow`, `viewCol` and `viewAgg` are view functions to show each headers and cells.
+
 -}
 pivotTable :
     { rowHeaders : List (Field row comparable1)
@@ -547,13 +610,16 @@ pivotTable :
 pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Table rows) =
     let
         indexedTable : Table ( Int, row )
-        indexedTable = indexedMap Tuple.pair (Table rows)
+        indexedTable =
+            indexedMap Tuple.pair (Table rows)
 
         arr : Array row
-        arr = Array.fromList rows
+        arr =
+            Array.fromList rows
 
         getRowByIndex : Int -> Maybe row
-        getRowByIndex index = Array.get index arr
+        getRowByIndex index =
+            Array.get index arr
 
         getIndices : Table Int -> Set Int
         getIndices (Table indices) =
@@ -579,9 +645,19 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
         viewRowHeader : Tree Int comparable1 -> Element msg
         viewRowHeader tree =
             tree
-                |> applyHorizontally (\(c, subTree) -> el [ width fill, height <| fillPortion <| getWidth subTree ] <| viewRow c)
+                |> applyHorizontally (\( c, subTree ) -> el [ width fill, height <| fillPortion <| getWidth subTree ] <| viewRow c)
                 |> List.map (column [ width <| fillPortion 1, height fill ])
                 |> row [ width <| fillPortion <| List.length rowHeaders, height <| fillPortion <| getWidth rowGroup ]
+
+        viewRightPartColumn : Int -> ( comparable2, Tree Int comparable2 ) -> Element msg
+        viewRightPartColumn h ( c, subTree ) =
+            column
+                [ width <| fillPortion <| getWidth subTree
+                , height fill
+                ]
+                [ el [ width fill, height fill ] <| viewCol c
+                , viewRightPart (h - 1) subTree
+                ]
 
         viewRightPart : Int -> Tree Int comparable2 -> Element msg
         viewRightPart h tree =
@@ -595,14 +671,35 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
                         |> List.map (List.filterMap getRowByIndex)
                         |> List.map aggregator
                         |> List.map viewAgg
-                        |> column [width <| fillPortion 1, height <| fillPortion <| h]
+                        |> column [ width <| fillPortion 1, height <| fillPortion <| h ]
+
                 Node lst ->
                     lst
-                        |> List.map (\(c, subTree) -> column [width <| fillPortion <| getWidth subTree, height fill ] [ el [width fill, height fill] <| viewCol c, viewRightPart (h-1) subTree ])
+                        |> List.map (viewRightPartColumn h)
                         |> row [ width fill, height fill ]
     in
     row
         [ width fill ]
-        [ column [ width shrink, height fill ] [ el [ width fill, height <| fillPortion <| List.length colHeaders ] <| Element.none, el [width fill] <| viewRowHeader rowGroup ]
-        , el [ width shrink, height fill ] <| viewRightPart (List.length colHeaders + getWidth rowGroup) colGroup
+        [ column
+            [ width shrink
+            , height fill
+            ]
+            [ el
+                [ width fill
+                , height <| fillPortion <| List.length colHeaders
+                ]
+              <|
+                Element.none
+            , el
+                [ width fill
+                ]
+              <|
+                viewRowHeader rowGroup
+            ]
+        , el
+            [ width shrink
+            , height fill
+            ]
+          <|
+            viewRightPart (List.length colHeaders + getWidth rowGroup) colGroup
         ]
