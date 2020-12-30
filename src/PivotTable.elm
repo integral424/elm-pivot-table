@@ -33,8 +33,8 @@ a table to show values grouped by some fields.
             Female -> "Female"
 
     pivotTable
-        { rowHeaders = []
-        , colHeaders = [ genderField ]
+        { rowGroupFields = []
+        , colGroupFields = [ genderField ]
         , aggregator = List.length
         , viewRow = always Element.none
         , viewCol = Element.text
@@ -447,8 +447,8 @@ Use this view function when you want to avoid using `elm-ui`.
 
 -}
 pivotTableHtml :
-    { rowHeaders : List (Field row comparable1)
-    , colHeaders : List (Field row comparable2)
+    { rowGroupFields : List (Field row comparable1)
+    , colGroupFields : List (Field row comparable2)
     , aggregator : Aggregator row agg
     , viewRow : comparable1 -> Html msg
     , viewCol : comparable2 -> Html msg
@@ -456,7 +456,7 @@ pivotTableHtml :
     }
     -> Table row
     -> Html msg
-pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } tbl =
+pivotTableHtml { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewAgg } tbl =
     let
         indexedTable : Table ( Int, row )
         indexedTable =
@@ -473,11 +473,11 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
 
         rowGroup : Tree Int comparable1
         rowGroup =
-            group (List.map columnShim rowHeaders) indexedTable |> mapTree Tuple.first
+            group (List.map columnShim rowGroupFields) indexedTable |> mapTree Tuple.first
 
         colGroup : Tree Int comparable2
         colGroup =
-            group (List.map columnShim colHeaders) indexedTable |> mapTree Tuple.first
+            group (List.map columnShim colGroupFields) indexedTable |> mapTree Tuple.first
 
         -- rowPaths : List (TreePath comparable1)
         -- rowPaths = getPaths rowGroup
@@ -521,9 +521,9 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
 
                         shim : Html msg
                         shim =
-                            td [ colspan <| List.length rowHeaders ] []
+                            td [ colspan <| List.length rowGroupFields ] []
                     in
-                    if List.length rowHeaders == 0 then
+                    if List.length rowGroupFields == 0 then
                         tr [] cells :: viewColHeaders subTrees
 
                     else
@@ -592,15 +592,15 @@ pivotTableHtml { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg }
 
 {-| Draws a pivot table.
 
-  - `rowHeaders` is a list of `Field`'s to group and generates grouped _rows_.
-  - `colHeaders` is a list of `Field`'s to group and generates grouped _columns_.
+  - `rowGroupFields` is a list of `Field`'s to group and generates grouped _rows_.
+  - `colGroupFields` is a list of `Field`'s to group and generates grouped _columns_.
   - `aggregator` aggregates each grouped set of table data into a single value.
   - `viewRow`, `viewCol` and `viewAgg` are view functions to show each headers and cells.
 
 -}
 pivotTable :
-    { rowHeaders : List (Field row comparable1)
-    , colHeaders : List (Field row comparable2)
+    { rowGroupFields : List (Field row comparable1)
+    , colGroupFields : List (Field row comparable2)
     , aggregator : Aggregator row agg
     , viewRow : comparable1 -> Element msg
     , viewCol : comparable2 -> Element msg
@@ -608,7 +608,7 @@ pivotTable :
     }
     -> Table row
     -> Element msg
-pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Table rows) =
+pivotTable { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewAgg } (Table rows) =
     let
         indexedTable : Table ( Int, row )
         indexedTable =
@@ -633,11 +633,11 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
 
         rowGroup : Tree Int comparable1
         rowGroup =
-            group (List.map columnShim rowHeaders) indexedTable |> mapTree Tuple.first
+            group (List.map columnShim rowGroupFields) indexedTable |> mapTree Tuple.first
 
         colGroup : Tree Int comparable2
         colGroup =
-            group (List.map columnShim colHeaders) indexedTable |> mapTree Tuple.first
+            group (List.map columnShim colGroupFields) indexedTable |> mapTree Tuple.first
 
         rowPaths : List (TreePath comparable1)
         rowPaths =
@@ -648,7 +648,7 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
             tree
                 |> applyHorizontally (\( c, subTree ) -> el [ width fill, height <| fillPortion <| getWidth subTree ] <| viewRow c)
                 |> List.map (column [ width <| fillPortion 1, height fill ])
-                |> row [ width <| fillPortion <| List.length rowHeaders, height <| fillPortion <| getWidth rowGroup ]
+                |> row [ width <| fillPortion <| List.length rowGroupFields, height <| fillPortion <| getWidth rowGroup ]
 
         viewRightPartColumn : Int -> ( comparable2, Tree Int comparable2 ) -> Element msg
         viewRightPartColumn h ( c, subTree ) =
@@ -687,7 +687,7 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
             ]
             [ el
                 [ width fill
-                , height <| fillPortion <| List.length colHeaders
+                , height <| fillPortion <| List.length colGroupFields
                 ]
               <|
                 Element.none
@@ -702,5 +702,5 @@ pivotTable { rowHeaders, colHeaders, aggregator, viewRow, viewCol, viewAgg } (Ta
             , height fill
             ]
           <|
-            viewRightPart (List.length colHeaders + getWidth rowGroup) colGroup
+            viewRightPart (List.length colGroupFields + getWidth rowGroup) colGroup
         ]
