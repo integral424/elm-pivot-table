@@ -75,11 +75,13 @@ import Html
         , td
         , th
         , tr
+        , div
         )
 import Html.Attributes
     exposing
         ( colspan
         , rowspan
+        , style
         )
 import List.Extra
 import Set exposing (Set)
@@ -457,6 +459,133 @@ pivotTableHtml :
     -> Table row
     -> Html msg
 pivotTableHtml { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewAgg } tbl =
+    let
+        indexedTable : Table ( Int, row )
+        indexedTable =
+            indexedMap Tuple.pair tbl
+
+        getRowByIndex : Table row -> Int -> Maybe row
+        getRowByIndex (Table lst) index =
+            List.Extra.getAt index lst
+
+        -- ignore index
+        columnShim : Field row comparable -> Field ( Int, row ) comparable
+        columnShim col =
+            Tuple.second >> col
+
+        rowGroup : Tree Int comparable1
+        rowGroup =
+            group (List.map columnShim rowGroupFields) indexedTable |> mapTree Tuple.first
+
+        colGroup : Tree Int comparable2
+        colGroup =
+            group (List.map columnShim colGroupFields) indexedTable |> mapTree Tuple.first
+
+        getIndices : Table Int -> Set Int
+        getIndices (Table indices) =
+            Set.fromList indices
+
+        rowDepth : Int
+        rowDepth = List.length rowGroupFields
+
+        colDepth : Int
+        colDepth = List.length colGroupFields
+
+        rowIndexSets : List (Int, Set Int)
+        rowIndexSets = getPaths rowGroup
+            |> List.filterMap (\path -> getAt path rowGroup)
+            |> List.map getIndices
+            |> List.indexedMap Tuple.pair
+
+        colIndexSets : List (Int, Set Int)
+        colIndexSets = getPaths colGroup
+            |> List.filterMap (\path -> getAt path colGroup)
+            |> List.map getIndices
+            |> List.indexedMap Tuple.pair
+
+        viewHeadersHelper :
+            (comparable -> Html msg)
+            -> Tree Int comparable
+            -> List
+                { depth : Int
+                , view : Html msg
+                , span : Int
+                , offset : Int
+                }
+        viewHeadersHelper viewer grp = grp
+            |> applyHorizontally identity
+            |> List.indexedMap (\i lst -> lst
+                |> List.foldl (\(c, subTree) result ->
+                    { depth = i
+                    , view = viewer c
+                    , span = getWidth subTree
+                    , offset = result |> List.map .span |> List.sum
+                    } :: result)
+                    []
+            )
+            |> List.concatMap identity
+
+        rowHeaders : List (Html msg)
+        rowHeaders = viewHeadersHelper viewRow rowGroup
+            |> List.map (\{ depth, view, span, offset } -> div
+                [ style "grid-row-start"    <| String.fromInt <| colDepth + offset + 1
+                , style "grid-row-end"      <| String.fromInt <| colDepth + offset + 1 + span
+                , style "grid-column-start" <| String.fromInt <| depth + 1
+                , style "grid-column-end"   <| String.fromInt <| depth + 2
+                ]
+                [ view ]
+            )
+
+        colHeaders : List (Html msg)
+        colHeaders = viewHeadersHelper viewCol colGroup
+            |> List.map (\{ depth, view, span, offset } -> div
+                [ style "grid-row-start"    <| String.fromInt <| depth + 1
+                , style "grid-row-end"      <| String.fromInt <| depth + 2
+                , style "grid-column-start" <| String.fromInt <| rowDepth + offset + 1
+                , style "grid-column-end"   <| String.fromInt <| rowDepth + offset + 1 + span
+                ]
+                [ view ]
+            )
+
+        dataCells : List (Html msg)
+        dataCells = List.Extra.cartesianProduct [rowIndexSets, colIndexSets]
+            |> List.filterMap (\lst ->
+                case lst of
+                    item1 :: item2 :: [] -> Just (item1, item2)
+                    _ -> Nothing
+                )
+            |> List.map (\((i, rowIndices), (j, colIndices)) -> div
+                [ style "grid-row-start"    <| String.fromInt <| colDepth + i + 1
+                , style "grid-row-end"      <| String.fromInt <| colDepth + i + 2
+                , style "grid-column-start" <| String.fromInt <| rowDepth + j + 1
+                , style "grid-column-end"   <| String.fromInt <| rowDepth + j + 2
+                ]
+                [ Set.intersect rowIndices colIndices
+                    |> Set.toList
+                    |> List.filterMap (getRowByIndex tbl)
+                    |> aggregator
+                    |> viewAgg
+                ])
+    in
+    div
+        [ style "display" "inline-grid"
+        , style "grid-template-rows"    <| String.join " " <| List.repeat (colDepth + getWidth rowGroup) "auto"
+        , style "grid-template-columns" <| String.join " " <| List.repeat (rowDepth + getWidth colGroup) "auto"
+        ]
+        (rowHeaders ++ colHeaders ++ dataCells)
+
+
+pivotTableHtml2 :
+    { rowGroupFields : List (Field row comparable1)
+    , colGroupFields : List (Field row comparable2)
+    , aggregator : Aggregator row agg
+    , viewRow : comparable1 -> Html msg
+    , viewCol : comparable2 -> Html msg
+    , viewAgg : agg -> Html msg
+    }
+    -> Table row
+    -> Html msg
+pivotTableHtml2 { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewAgg } tbl =
     let
         indexedTable : Table ( Int, row )
         indexedTable =
