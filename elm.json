@@ -3,7 +3,7 @@
     "name": "integral424/elm-pivot-table",
     "summary": "Analyze and visualize table data by grouping by various fields",
     "license": "BSD-3-Clause",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "PivotTable"
     ],
