@@ -444,9 +444,8 @@ type alias Aggregator row agg =
 
 {-| Draws a pivot table of `Html` type.
 
-This view makes use of `colspan` and `rowspan` attributes of html table.
+This view makes use of grid attributes of html table.
 Use this view function when you want to avoid using `elm-ui`.
-
 -}
 pivotTableHtml :
     { rowGroupFields : List (Field row comparable1)
@@ -575,7 +574,13 @@ pivotTableHtml { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, v
         (rowHeaders ++ colHeaders ++ dataCells)
 
 
-pivotTableHtml2 :
+{- Draws a pivot table of `Html` type.
+
+This view makes use of `colspan` and `rowspan` attributes of html table.
+Use this view function when you want to avoid using `elm-ui`.
+-}
+{-
+pivotTableHtml :
     { rowGroupFields : List (Field row comparable1)
     , colGroupFields : List (Field row comparable2)
     , aggregator : Aggregator row agg
@@ -585,7 +590,7 @@ pivotTableHtml2 :
     }
     -> Table row
     -> Html msg
-pivotTableHtml2 { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewAgg } tbl =
+pivotTableHtml { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewAgg } tbl =
     let
         indexedTable : Table ( Int, row )
         indexedTable =
@@ -717,6 +722,7 @@ pivotTableHtml2 { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, 
             Set.fromList indices
     in
     viewColHeaders [ colGroup ] ++ viewRows rowGroup |> table []
+-}
 
 
 {-| Draws a pivot table.
