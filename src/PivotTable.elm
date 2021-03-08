@@ -749,22 +749,14 @@ pivotTable { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewA
         indexedTable =
             indexedMap Tuple.pair (Table rows)
 
-        arr : Array row
-        arr =
-            Array.fromList rows
-
-        getRowByIndex : Int -> Maybe row
-        getRowByIndex index =
-            Array.get index arr
-
-        getIndices : Table Int -> Set Int
-        getIndices (Table indices) =
-            Set.fromList indices
+        getRowByIndex : Table row -> Int -> Maybe row
+        getRowByIndex (Table lst) index =
+            List.Extra.getAt index lst
 
         -- ignore index
         columnShim : Field row comparable -> Field ( Int, row ) comparable
-        columnShim field =
-            Tuple.second >> field
+        columnShim col =
+            Tuple.second >> col
 
         rowGroup : Tree Int comparable1
         rowGroup =
@@ -774,68 +766,99 @@ pivotTable { rowGroupFields, colGroupFields, aggregator, viewRow, viewCol, viewA
         colGroup =
             group (List.map columnShim colGroupFields) indexedTable |> mapTree Tuple.first
 
-        rowPaths : List (TreePath comparable1)
-        rowPaths =
-            getPaths rowGroup
+        getIndices : Table Int -> Set Int
+        getIndices (Table indices) =
+            Set.fromList indices
 
-        viewRowHeader : Tree Int comparable1 -> Element msg
-        viewRowHeader tree =
-            tree
-                |> applyHorizontally (\( c, subTree ) -> el [ width fill, height <| fillPortion <| getWidth subTree ] <| viewRow c)
-                |> List.map (column [ width <| fillPortion 1, height fill ])
-                |> row [ width <| fillPortion <| List.length rowGroupFields, height <| fillPortion <| getWidth rowGroup ]
+        rowDepth : Int
+        rowDepth = List.length rowGroupFields
 
-        viewRightPartColumn : Int -> ( comparable2, Tree Int comparable2 ) -> Element msg
-        viewRightPartColumn h ( c, subTree ) =
-            column
-                [ width <| fillPortion <| getWidth subTree
-                , height fill
-                ]
-                [ el [ width fill, height fill ] <| viewCol c
-                , viewRightPart (h - 1) subTree
-                ]
+        colDepth : Int
+        colDepth = List.length colGroupFields
 
-        viewRightPart : Int -> Tree Int comparable2 -> Element msg
-        viewRightPart h tree =
-            case tree of
-                Leaf tbl ->
-                    rowPaths
-                        |> List.map (\path -> getAt path rowGroup)
-                        |> List.map (Maybe.map getIndices >> Maybe.withDefault Set.empty)
-                        |> List.map (Set.intersect (getIndices tbl))
-                        |> List.map Set.toList
-                        |> List.map (List.filterMap getRowByIndex)
-                        |> List.map aggregator
-                        |> List.map viewAgg
-                        |> column [ width <| fillPortion 1, height <| fillPortion <| h ]
+        rowIndexSets : List (Int, Set Int)
+        rowIndexSets = getPaths rowGroup
+            |> List.filterMap (\path -> getAt path rowGroup)
+            |> List.map getIndices
+            |> List.indexedMap Tuple.pair
 
-                Node lst ->
-                    lst
-                        |> List.map (viewRightPartColumn h)
-                        |> row [ width fill, height fill ]
+        colIndexSets : List (Int, Set Int)
+        colIndexSets = getPaths colGroup
+            |> List.filterMap (\path -> getAt path colGroup)
+            |> List.map getIndices
+            |> List.indexedMap Tuple.pair
+
+        viewHeadersHelper :
+            (comparable -> Element msg)
+            -> Tree Int comparable
+            -> List
+                { depth : Int
+                , view : Element msg
+                , span : Int
+                , offset : Int
+                }
+        viewHeadersHelper viewer grp = grp
+            |> applyHorizontally identity
+            |> List.indexedMap (\i lst -> lst
+                |> List.foldl (\(c, subTree) result ->
+                    { depth = i
+                    , view = viewer c
+                    , span = getWidth subTree
+                    , offset = result |> List.map .span |> List.sum
+                    } :: result)
+                    []
+            )
+            |> List.concatMap identity
+
+        rowHeaders : List (Element msg)
+        rowHeaders = viewHeadersHelper viewRow rowGroup
+            |> List.map (\{ depth, view, span, offset } -> el
+                (List.map Element.htmlAttribute
+                [ style "grid-row-start"    <| String.fromInt <| colDepth + offset + 1
+                , style "grid-row-end"      <| String.fromInt <| colDepth + offset + 1 + span
+                , style "grid-column-start" <| String.fromInt <| depth + 1
+                , style "grid-column-end"   <| String.fromInt <| depth + 2
+                ])
+                view
+            )
+
+        colHeaders : List (Element msg)
+        colHeaders = viewHeadersHelper viewCol colGroup
+            |> List.map (\{ depth, view, span, offset } -> el
+                (List.map Element.htmlAttribute
+                [ style "grid-row-start"    <| String.fromInt <| depth + 1
+                , style "grid-row-end"      <| String.fromInt <| depth + 2
+                , style "grid-column-start" <| String.fromInt <| rowDepth + offset + 1
+                , style "grid-column-end"   <| String.fromInt <| rowDepth + offset + 1 + span
+                ])
+                view
+            )
+
+        dataCells : List (Element msg)
+        dataCells = List.Extra.cartesianProduct [rowIndexSets, colIndexSets]
+            |> List.filterMap (\lst ->
+                case lst of
+                    item1 :: item2 :: [] -> Just (item1, item2)
+                    _ -> Nothing
+                )
+            |> List.map (\((i, rowIndices), (j, colIndices)) -> el
+                (List.map Element.htmlAttribute
+                [ style "grid-row-start"    <| String.fromInt <| colDepth + i + 1
+                , style "grid-row-end"      <| String.fromInt <| colDepth + i + 2
+                , style "grid-column-start" <| String.fromInt <| rowDepth + j + 1
+                , style "grid-column-end"   <| String.fromInt <| rowDepth + j + 2
+                ])
+                (Set.intersect rowIndices colIndices
+                    |> Set.toList
+                    |> List.filterMap (getRowByIndex (Table rows))
+                    |> aggregator
+                    |> viewAgg
+                ))
     in
-    row
-        [ width fill ]
-        [ column
-            [ width shrink
-            , height fill
-            ]
-            [ el
-                [ width fill
-                , height <| fillPortion <| List.length colGroupFields
-                ]
-              <|
-                Element.none
-            , el
-                [ width fill
-                ]
-              <|
-                viewRowHeader rowGroup
-            ]
-        , el
-            [ width shrink
-            , height fill
-            ]
-          <|
-            viewRightPart (List.length colGroupFields + getWidth rowGroup) colGroup
-        ]
+    Element.paragraph
+        (List.map Element.htmlAttribute
+        [ style "display" "inline-grid"
+        , style "grid-template-rows"    <| String.join " " <| List.repeat (colDepth + getWidth rowGroup) "auto"
+        , style "grid-template-columns" <| String.join " " <| List.repeat (rowDepth + getWidth colGroup) "auto"
+        ] ++ [Element.width Element.shrink])
+        (rowHeaders ++ colHeaders ++ dataCells)
